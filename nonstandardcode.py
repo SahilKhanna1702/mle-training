@@ -1,21 +1,20 @@
-import os
-import tarfile
-
 import numpy as np
 import pandas as pd
-from scipy.stats import randint
+import os
+import tarfile
 from six.moves import urllib
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-from sklearn.model_selection import (
-    GridSearchCV,
-    RandomizedSearchCV,
-    StratifiedShuffleSplit,
-    train_test_split,
-)
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import randint
+from sklearn.model_selection import GridSearchCV
+
 
 DOWNLOAD_ROOT = "https://raw.githubusercontent.com/ageron/handson-ml/master/"
 HOUSING_PATH = os.path.join("datasets", "housing")
@@ -31,7 +30,7 @@ def fetch_housing_data(housing_url=HOUSING_URL, housing_path=HOUSING_PATH):
     housing_tgz.close()
 
 
-housing1 = fetch_housing_data(housing_url=HOUSING_URL, housing_path=HOUSING_PATH)
+fetch_housing_data()
 
 
 def load_housing_data(housing_path=HOUSING_PATH):
@@ -39,8 +38,7 @@ def load_housing_data(housing_path=HOUSING_PATH):
     return pd.read_csv(csv_path)
 
 
-housing = load_housing_data(housing_path=HOUSING_PATH)
-
+housing = load_housing_data()
 
 train_set, test_set = train_test_split(housing, test_size=0.2, random_state=42)
 
@@ -51,7 +49,7 @@ housing["income_cat"] = pd.cut(
 )
 
 
-split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=33)
 for train_index, test_index in split.split(housing, housing["income_cat"]):
     strat_train_set = housing.loc[train_index]
     strat_test_set = housing.loc[test_index]
@@ -84,18 +82,17 @@ housing = strat_train_set.copy()
 housing.plot(kind="scatter", x="longitude", y="latitude")
 housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.1)
 
-housing_1 = housing.drop(["ocean_proximity"], axis=1)
-corr_matrix = housing_1.corr()
+corr_matrix = housing.corr()
 corr_matrix["median_house_value"].sort_values(ascending=False)
 housing["rooms_per_household"] = housing["total_rooms"] / housing["households"]
-housing["bedrooms_per_room"] = housing["total_bedrooms"] / housing["total_rooms"]
-housing["population_per_household"] = housing["population"] / housing["households"]
-
+f = housing["total_bedrooms"] / housing["total_rooms"]
+housing["bedrooms_per_room"] = f
+f = housing["population"] / housing["households"]
+housing["population_per_household"] = f
 housing = strat_train_set.drop(
     "median_house_value", axis=1
 )  # drop labels for training set
 housing_labels = strat_train_set["median_house_value"].copy()
-
 
 imputer = SimpleImputer(strategy="median")
 
@@ -105,8 +102,8 @@ imputer.fit(housing_num)
 X = imputer.transform(housing_num)
 
 housing_tr = pd.DataFrame(X, columns=housing_num.columns, index=housing.index)
-
-housing_tr["rooms_per_household"] = housing_tr["total_rooms"] / housing_tr["households"]
+f = housing_tr["total_rooms"] / housing_tr["households"]
+housing_tr["rooms_per_household"] = f
 housing_tr["bedrooms_per_room"] = (
     housing_tr["total_bedrooms"] / housing_tr["total_rooms"]
 )
@@ -115,16 +112,19 @@ housing_tr["population_per_household"] = (
 )
 
 housing_cat = housing[["ocean_proximity"]]
-housing_prepared = housing_tr.join(pd.get_dummies(housing_cat, drop_first=True))
+f = pd.get_dummies(housing_cat, drop_first=True)
+housing_prepared = housing_tr.join(f)
 
 
 lin_reg = LinearRegression()
 lin_reg.fit(housing_prepared, housing_labels)
 
+
 housing_predictions = lin_reg.predict(housing_prepared)
 lin_mse = mean_squared_error(housing_labels, housing_predictions)
 lin_rmse = np.sqrt(lin_mse)
 lin_rmse
+
 
 lin_mae = mean_absolute_error(housing_labels, housing_predictions)
 lin_mae
@@ -137,6 +137,7 @@ housing_predictions = tree_reg.predict(housing_prepared)
 tree_mse = mean_squared_error(housing_labels, housing_predictions)
 tree_rmse = np.sqrt(tree_mse)
 tree_rmse
+
 
 param_distribs = {
     "n_estimators": randint(low=1, high=200),
@@ -156,6 +157,7 @@ rnd_search.fit(housing_prepared, housing_labels)
 cvres = rnd_search.cv_results_
 for mean_score, params in zip(cvres["mean_test_score"], cvres["params"]):
     print(np.sqrt(-mean_score), params)
+
 
 param_grid = [
     # try 12 (3×4) combinations of hyperparameters
@@ -205,7 +207,8 @@ X_test_prepared["population_per_household"] = (
 )
 
 X_test_cat = X_test[["ocean_proximity"]]
-X_test_prepared = X_test_prepared.join(pd.get_dummies(X_test_cat, drop_first=True))
+f = pd.get_dummies(X_test_cat, drop_first=True)
+X_test_prepared = X_test_prepared.join(f)
 
 
 final_predictions = final_model.predict(X_test_prepared)
